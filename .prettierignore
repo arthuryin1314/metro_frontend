@@ -1,0 +1,11 @@
+dist/
+dist-ssr/
+coverage/
+node_modules/
+*.min.*
+*.map
+src/assets/model/
+src/assets/water.json
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
