@@ -8,7 +8,7 @@ import PageFooter from './component/PageFooter.vue'
   <main class="layout-view">
     <PageHeader />
     <CesiumView />
-    <RouterView />
+    <RouterView class="route-view" />
     <PageFooter />
   </main>
 </template>
@@ -19,5 +19,12 @@ import PageFooter from './component/PageFooter.vue'
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+}
+
+.route-view {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
 }
 </style>

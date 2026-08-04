@@ -1,5 +1,5 @@
 export const manageStation = {
-    path: '/manageStation',
+    path: 'manageStation',
     name: 'manageStation',
     component: () => import('@/views/manageStation/manageStation.vue'),
 }

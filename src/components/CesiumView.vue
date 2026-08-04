@@ -85,7 +85,7 @@ onUnmounted(() => {
   right: auto !important;
   bottom: auto !important;
   left: 50% !important;
-  width: min(720px, 42vw) !important;
+  width: min(560px, 32vw) !important;
   transform: translateX(-50%);
 }
 </style>
