@@ -3,10 +3,12 @@ import { onMounted, onUnmounted, useTemplateRef, markRaw } from 'vue'
 import * as Cesium from 'cesium'
 import { useCesiumStore } from '@/stores/ceisumStore'
 import { AMapImageryProvider } from '@cesium-china/cesium-map'
+import { createWaterPrimitive, setupDayNight } from '@/utils/cesium/dayNight'
 const containerRef = useTemplateRef<HTMLDivElement>('container')
 const cesiumStore = useCesiumStore()
 let viewer: Cesium.Viewer | undefined
 let isUnmounted = false
+let stopDayNight: (() => void) | undefined
 const tilesetUrl = 'http://localhost:90/model/tileset.json'
 const AmapOptions = {
   style: 'img', // style: img、elec、cva
@@ -41,6 +43,13 @@ onMounted(async () => {
 
     viewer.scene.primitives.add(loadedTileset)
     cesiumStore.SetTileset(markRaw(loadedTileset))
+    const water = await createWaterPrimitive(viewer)
+    if (isUnmounted || viewer.isDestroyed()) {
+      if (water && !water.primitive.isDestroyed()) water.primitive.destroy()
+      if (!loadedTileset.isDestroyed()) loadedTileset.destroy()
+      return
+    }
+    stopDayNight = setupDayNight(viewer, loadedTileset, water?.material)
     const boundingSphere = loadedTileset.boundingSphere
     // ponytail: 锚点南移半径，覆盖 zoomTo 默认盯着模型中心的行为，调这个系数即可改变往南多远
     const shiftedCenter = Cesium.Matrix4.multiplyByPoint(
@@ -66,6 +75,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   isUnmounted = true
+  stopDayNight?.()
+  stopDayNight = undefined
   cesiumStore.SetTileset(null)
   cesiumStore.SetViewer(null)
   viewer?.destroy()

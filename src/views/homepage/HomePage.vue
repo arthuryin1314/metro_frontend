@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+import Viewer from 'viewerjs'
+import 'viewerjs/dist/viewer.css'
 import OperationChart from './component/chart/OperationChart.vue'
 import PagePanel from '@/components/PagePanel.vue'
 import SubwayActivity from './component/chart/SubwayActivity.vue'
@@ -7,6 +10,17 @@ import subwayOverviewImage from '@/assets/uiResources/sub.png'
 import AlarmChart from './component/chart/AlarmChart.vue'
 import VideoMonitor from './component/video/VideoMonitor.vue'
 import type { VideoSource } from './component/video/types'
+
+const subwayOverviewRef = useTemplateRef<HTMLImageElement>('subwayOverview')
+let subwayOverviewViewer: Viewer | undefined
+
+onMounted(() => {
+  if (subwayOverviewRef.value) {
+    subwayOverviewViewer = new Viewer(subwayOverviewRef.value, { navbar: false })
+  }
+})
+
+onBeforeUnmount(() => subwayOverviewViewer?.destroy())
 
 const videoSource: VideoSource = {
   url: import.meta.env.VITE_VIDEO_MONITOR_URL ?? '',
@@ -33,7 +47,13 @@ const videoSource: VideoSource = {
       <PagePanel>
         <template #header><h2>线路概览</h2></template>
         <template #content>
-          <img class="subway-overview" :src="subwayOverviewImage" alt="武汉地铁线路图" />
+          <img
+            ref="subwayOverview"
+            class="subway-overview"
+            :src="subwayOverviewImage"
+            alt="武汉地铁线路图"
+            title="点击全屏查看"
+          />
         </template>
       </PagePanel>
       <PagePanel class="alarm-panel">
@@ -118,6 +138,7 @@ const videoSource: VideoSource = {
   display: block;
   width: 100%;
   height: auto;
+  cursor: zoom-in;
   background-color: #071522;
 }
 </style>
