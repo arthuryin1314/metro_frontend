@@ -5,27 +5,74 @@ import { sortLinesNaturally } from '@/utils/lineSort'
 
 const props = defineProps<{ handle: LineRenderHandle | null }>()
 
+// 会话恢复:仅当前标签页内生效,关闭标签页由 sessionStorage 自然清除。
+const STORAGE_KEY = 'metro-line-visibility'
+
+function loadVisibility(lines: Array<{ id: number }>): Record<number, boolean> {
+  const saved: Record<number, boolean> = {}
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (raw) Object.assign(saved, JSON.parse(raw))
+  } catch {
+    // ponytail: 损坏数据按无存储处理,全部默认可见
+  }
+  const result: Record<number, boolean> = {}
+  for (const line of lines) {
+    // 新出现且可渲染的线路默认可见;已失效线路 ID 不读取,自然忽略
+    result[line.id] = saved[line.id] ?? true
+  }
+  return result
+}
+
+function saveVisibility() {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(visible.value))
+  } catch {
+    // 存储不可用不影响页面功能
+  }
+}
+
 const expanded = ref(false)
-// 显隐状态:线路 ID → 可见,初始全部可见。
+// 显隐状态:线路 ID → 可见。首次进入全部可见,之后从会话恢复。
 const visible = ref<Record<number, boolean>>({})
 
 watch(
   () => props.handle,
   (handle) => {
     if (!handle) return
-    const initial: Record<number, boolean> = {}
-    for (const line of handle.lines) initial[line.id] = true
-    visible.value = initial
+    visible.value = loadVisibility(handle.lines)
+    // 渲染器创建时全部默认显示;恢复出的隐藏线路同步过去,保持一致
+    for (const line of handle.lines) {
+      if (visible.value[line.id] === false) handle.setLineVisible(line.id, false)
+    }
   },
   { immediate: true },
 )
 
 const sortedLines = computed(() => sortLinesNaturally(props.handle?.lines ?? []))
+const total = computed(() => props.handle?.lines.length ?? 0)
+const visibleCount = computed(
+  () => sortedLines.value.filter((line) => visible.value[line.id]).length,
+)
+const allVisible = computed(() => total.value > 0 && visibleCount.value === total.value)
+const isIndeterminate = computed(() => visibleCount.value > 0 && visibleCount.value < total.value)
 
 function toggle(lineId: number) {
   const next = !visible.value[lineId]
-  visible.value[lineId] = next
+  visible.value = { ...visible.value, [lineId]: next }
   props.handle?.setLineVisible(lineId, next)
+  saveVisibility()
+}
+
+// 全选控件:未全部可见 → 全部显示;已全部可见 → 全部隐藏。
+function toggleAll() {
+  if (!props.handle || total.value === 0) return
+  const next = !allVisible.value
+  const updates: Record<number, boolean> = {}
+  for (const line of sortedLines.value) updates[line.id] = next
+  visible.value = { ...visible.value, ...updates }
+  for (const line of sortedLines.value) props.handle.setLineVisible(line.id, next)
+  saveVisibility()
 }
 </script>
 
@@ -41,7 +88,22 @@ function toggle(lineId: number) {
       线路
     </button>
     <div v-if="expanded && props.handle" class="line-control__panel">
-      <ul class="line-control__list">
+      <div class="line-control__toolbar">
+        <label class="line-control__select-all">
+          <input
+            type="checkbox"
+            class="line-control__select-all-input"
+            :checked="allVisible"
+            :indeterminate.prop="isIndeterminate"
+            :disabled="total === 0"
+            @click.prevent="toggleAll"
+          />
+          <span>全选</span>
+        </label>
+        <span class="line-control__count">{{ visibleCount }}/{{ total }}</span>
+      </div>
+      <p v-if="total === 0" class="line-control__empty">暂无线线路数据</p>
+      <ul v-else class="line-control__list">
         <li v-for="line in sortedLines" :key="line.id">
           <button
             type="button"
@@ -96,6 +158,35 @@ function toggle(lineId: number) {
   border-radius: 4px;
   background: rgba(7, 21, 34, 0.88);
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+.line-control__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid rgba(105, 180, 255, 0.25);
+  font-size: 13px;
+}
+
+.line-control__select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.line-control__count {
+  color: rgba(233, 248, 255, 0.7);
+}
+
+.line-control__empty {
+  margin: 0;
+  padding: 12px 10px;
+  color: rgba(233, 248, 255, 0.7);
+  font-size: 13px;
+  text-align: center;
 }
 
 .line-control__list {
