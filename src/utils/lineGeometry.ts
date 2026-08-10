@@ -85,11 +85,14 @@ function toLngLatPair(xStr: string | undefined, yStr: string | undefined): [numb
   return gcj02ToWgs84(lon, lat)
 }
 
-/** 解析轨迹字符串;返回 WGS84 坐标数组或显式失败原因。 */
+/** 解析轨迹字符串;返回 WGS84 坐标数组或显式失败原因。缺字段按坏行处理,不抛异常。 */
 export function parseLineTrace(
-  xs: string,
-  ys: string,
+  xs: string | null | undefined,
+  ys: string | null | undefined,
 ): { positions: Array<[number, number]> } | { reason: string } {
+  if (xs === undefined || ys === undefined || xs === null || ys === null) {
+    return { reason: '轨迹坐标不可解析' }
+  }
   const xsArr = xs.split(',').map((s) => s.trim())
   const ysArr = ys.split(',').map((s) => s.trim())
   if (xsArr.length !== ysArr.length) return { reason: '轨迹横纵坐标数量不一致' }
@@ -103,10 +106,15 @@ export function parseLineTrace(
   return { positions }
 }
 
-/** 解析单个站点坐标;返回 WGS84 经纬度或 null。 */
-export function parseStationCoords(xyCoords: string): [number, number] | null {
-  const [lonStr, latStr] = xyCoords.split(';')
-  return toLngLatPair(lonStr, latStr)
+/**
+ * 解析单个站点坐标;返回 WGS84 经纬度或 null。
+ * 严格 `经度;纬度` 两段格式:缺字段或多余分隔符均返回 null,不静默丢弃。
+ */
+export function parseStationCoords(xyCoords: string | null | undefined): [number, number] | null {
+  if (xyCoords === undefined || xyCoords === null) return null
+  const parts = xyCoords.split(';')
+  if (parts.length !== 2) return null
+  return toLngLatPair(parts[0], parts[1])
 }
 
 // 相同物理站点容差:约 10 米(0.0001 度),允许微小格式误差。
@@ -118,16 +126,25 @@ function normalizeStationName(name: string): string {
 
 /**
  * 建立物理站点注册表:规范化站名与近似坐标共同识别同一物理站点,
- * 相同站点只保留一条记录并累积所属线路;无效站点坐标跳过。
+ * 相同站点只保留一条记录并累积所属线路;缺失站点列表/站名/坐标的行
+ * 按行跳过并计数,不抛异常、不阻断其他站点。
  * 返回 { stations, skipped } —— skipped 为被跳过的站点数。
  */
 export function buildStationRegistry(
-  lines: Array<{ id: number; stationsList: Array<{ name: string; xy_coords: string }> }>,
+  lines: Array<{
+    id: number
+    stationsList?: Array<{ name?: string; xy_coords?: string | null }>
+  }>,
 ): { stations: PhysicalStation[]; skipped: number } {
   const stations: PhysicalStation[] = []
   let skipped = 0
   for (const line of lines) {
+    if (!line.stationsList) continue
     for (const station of line.stationsList) {
+      if (station.name === undefined || station.name === null) {
+        skipped++
+        continue
+      }
       const pos = parseStationCoords(station.xy_coords)
       if (!pos) {
         skipped++

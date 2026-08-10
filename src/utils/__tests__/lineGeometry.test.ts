@@ -70,6 +70,36 @@ test('非严格数值格式(十六进制/科学计数法)被拒绝', () => {
   assert.equal(parseStationCoords('1e3;30.7'), null)
 })
 
+test('站点坐标多余分隔符被拒绝,不静默丢弃', () => {
+  assert.equal(parseStationCoords('114.3;30.7;999'), null)
+})
+
+test('缺少轨迹坐标的线路标记为不可渲染,不拖垮其他线路', () => {
+  const lines = [
+    { id: 1, name: '1号线', xs: REAL_XS, ys: REAL_YS },
+    { id: 9, name: '9号线' },
+    { id: 10, name: '10号线', xs: null, ys: null },
+  ] as unknown as Parameters<typeof normalizeLines>[0]
+  const parsed = normalizeLines(lines)
+  assert.equal(parsed.length, 3)
+  assert.equal(parsed[0]!.renderable, true)
+  assert.equal(parsed[1]!.renderable, false)
+  assert.equal(parsed[2]!.renderable, false)
+  assert.ok(parsed[1]!.reason)
+})
+
+test('缺失站点列表/站名/坐标的线路不抛异常,其余站点正常注册', () => {
+  const lines = [
+    { id: 1, stationsList: [{ name: '好站', xy_coords: REAL_XY }] },
+    { id: 2 },
+    { id: 3, stationsList: [{ xy_coords: REAL_XY }, { name: '无坐标站' }] },
+  ]
+  const { stations, skipped } = buildStationRegistry(lines)
+  assert.equal(skipped, 2) // 无站名 + 无坐标
+  assert.equal(stations.length, 1)
+  assert.equal(stations[0]!.name, '好站')
+})
+
 test('坐标转换确定性且偏移在合理范围', () => {
   const [lon, lat] = gcj02ToWgs84(114.329481, 30.711953)
   assert.ok(Number.isFinite(lon) && Number.isFinite(lat))
