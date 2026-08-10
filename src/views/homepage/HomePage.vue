@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue'
+import { onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import Viewer from 'viewerjs'
 import 'viewerjs/dist/viewer.css'
 import OperationChart from './component/chart/OperationChart.vue'
@@ -10,7 +10,9 @@ import subwayOverviewImage from '@/assets/uiResources/sub.png'
 import AlarmChart from './component/chart/AlarmChart.vue'
 import VideoMonitor from './component/video/VideoMonitor.vue'
 import type { VideoSource } from './component/video/types'
+import LineControlPanel from './component/LineControlPanel.vue'
 import { useCesiumStore } from '@/stores/ceisumStore'
+import type { LineRenderHandle } from '@/utils/cesium/lineRenderer'
 import { loadMetroLines } from '@/utils/cesium/lineRenderer'
 
 const subwayOverviewRef = useTemplateRef<HTMLImageElement>('subwayOverview')
@@ -24,14 +26,14 @@ onMounted(() => {
 
 // 线路显示单元:进入首页渲染,离开首页完整清理。
 const cesiumStore = useCesiumStore()
-let stopLineRender: (() => void) | undefined
+const lineRenderHandle = shallowRef<LineRenderHandle | null>(null)
 let lineRenderTask: Promise<void> | undefined
 const stopViewerWatch = watch(
   () => cesiumStore.cesiumInstance,
   (viewer) => {
     if (!viewer || lineRenderTask) return
-    lineRenderTask = loadMetroLines(viewer).then((stop) => {
-      stopLineRender = stop
+    lineRenderTask = loadMetroLines(viewer).then((handle) => {
+      lineRenderHandle.value = handle
     })
   },
   { immediate: true },
@@ -40,7 +42,7 @@ const stopViewerWatch = watch(
 onBeforeUnmount(() => {
   stopViewerWatch()
   subwayOverviewViewer?.destroy()
-  if (lineRenderTask) void lineRenderTask.then(() => stopLineRender?.())
+  if (lineRenderTask) void lineRenderTask.then(() => lineRenderHandle.value?.stop())
 })
 
 const videoSource: VideoSource = {
@@ -65,6 +67,7 @@ const videoSource: VideoSource = {
       </PagePanel>
     </aside>
     <aside class="dashboard-panels dashboard-panels--right" aria-label="右侧数据面板">
+      <LineControlPanel :handle="lineRenderHandle" />
       <PagePanel>
         <template #header><h2>线路概览</h2></template>
         <template #content>
