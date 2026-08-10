@@ -110,11 +110,11 @@ function toggleAll() {
 
 <template>
   <div class="line-control">
+    <!-- 可访问名取可见文本(含计数与异常数);展开状态由 aria-expanded 传达 -->
     <button
       type="button"
       class="line-control__toggle"
       :aria-expanded="expanded"
-      :aria-label="expanded ? '收起线路清单' : '展开线路清单'"
       @click="expanded = !expanded"
     >
       <span>线路</span>
@@ -245,6 +245,19 @@ function toggleAll() {
 
 .line-control__toggle:hover {
   border-color: rgba(105, 180, 255, 0.7);
+}
+
+/* 键盘焦点可见性:三个交互元素统一科技蓝描边 */
+.line-control__toggle:focus-visible,
+.line-control__retry:focus-visible,
+.line-control__row:focus-visible {
+  outline: 2px solid rgba(105, 180, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.line-control__select-all-input:focus-visible {
+  outline: 2px solid rgba(105, 180, 255, 0.9);
+  outline-offset: 1px;
 }
 
 .line-control__panel {
