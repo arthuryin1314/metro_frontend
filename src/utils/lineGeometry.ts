@@ -71,10 +71,17 @@ function isValidLngLat(lon: number, lat: number): boolean {
   )
 }
 
+// 严格数值格式:拒绝空串及 Number() 会静默接受的形式(十六进制、科学计数法等)。
+const COORD_NUMERIC_PATTERN = /^-?\d+(?:\.\d+)?$/
+
 function toLngLatPair(xStr: string | undefined, yStr: string | undefined): [number, number] | null {
-  const lon = Number(xStr)
-  const lat = Number(yStr)
-  if (xStr === undefined || yStr === undefined || !isValidLngLat(lon, lat)) return null
+  if (xStr === undefined || yStr === undefined) return null
+  const xs = xStr.trim()
+  const ys = yStr.trim()
+  if (!COORD_NUMERIC_PATTERN.test(xs) || !COORD_NUMERIC_PATTERN.test(ys)) return null
+  const lon = Number(xs)
+  const lat = Number(ys)
+  if (!isValidLngLat(lon, lat)) return null
   return gcj02ToWgs84(lon, lat)
 }
 

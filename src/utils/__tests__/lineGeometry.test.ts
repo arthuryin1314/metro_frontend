@@ -57,6 +57,19 @@ test('无效站点坐标返回 null', () => {
   assert.equal(parseStationCoords(''), null)
 })
 
+test('空坐标字符串不被解析为 [0,0](Number("")===0 陷阱)', () => {
+  assert.deepEqual(parseLineTrace(',114.3', '30.7,30.8'), { reason: '轨迹坐标不可解析' })
+  assert.deepEqual(parseLineTrace('114.3,', '30.7,30.8'), { reason: '轨迹坐标不可解析' })
+  assert.equal(parseStationCoords(';'), null)
+  assert.equal(parseStationCoords('114.3;'), null)
+  assert.equal(parseStationCoords('  '), null)
+})
+
+test('非严格数值格式(十六进制/科学计数法)被拒绝', () => {
+  assert.deepEqual(parseLineTrace('0x10,114.3', '30.7,30.8'), { reason: '轨迹坐标不可解析' })
+  assert.equal(parseStationCoords('1e3;30.7'), null)
+})
+
 test('坐标转换确定性且偏移在合理范围', () => {
   const [lon, lat] = gcj02ToWgs84(114.329481, 30.711953)
   assert.ok(Number.isFinite(lon) && Number.isFinite(lat))

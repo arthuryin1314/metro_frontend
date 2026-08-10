@@ -37,6 +37,7 @@ export function createLineRenderer(
   stations: RenderableStation[],
 ): () => void {
   if (lines.length === 0 && stations.length === 0) return () => {}
+  // ponytail: 按线路分组实体留给线路显隐 Ticket;本 Ticket 明确 out of scope
   const dataSource = new Cesium.CustomDataSource('metro-lines')
   viewer.dataSources.add(dataSource)
 
