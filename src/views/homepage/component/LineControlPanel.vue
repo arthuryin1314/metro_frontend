@@ -3,7 +3,15 @@ import { computed, ref, watch } from 'vue'
 import type { LineRenderHandle } from '@/utils/cesium/lineRenderer'
 import { sortLinesNaturally } from '@/utils/lineSort'
 
-const props = defineProps<{ handle: LineRenderHandle | null }>()
+const props = defineProps<{
+  handle: LineRenderHandle | null
+  /** 线路数据请求进行中。 */
+  loading?: boolean
+  /** 首次请求失败信息;存在时面板自动展开并显示重试。 */
+  error?: string | null
+  /** 重试整批线路请求;由首页持有请求能力。 */
+  onRetry?: () => void
+}>()
 
 // 会话恢复:仅当前标签页内生效,关闭标签页由 sessionStorage 自然清除。
 const STORAGE_KEY = 'metro-line-visibility'
@@ -58,14 +66,30 @@ watch(
 )
 
 const sortedLines = computed(() => sortLinesNaturally(props.handle?.lines ?? []))
-const total = computed(() => props.handle?.lines.length ?? 0)
+// 计数口径:可见数/可渲染总数;不可渲染线路不计入总数,但计入异常数。
+const renderableLines = computed(() => sortedLines.value.filter((l) => l.renderable !== false))
+const total = computed(() => renderableLines.value.length)
 const visibleCount = computed(
-  () => sortedLines.value.filter((line) => visible.value[line.id]).length,
+  () => renderableLines.value.filter((line) => visible.value[line.id]).length,
+)
+// 异常线路数:不可渲染或含坏站点警告的线路,每条最多计 1(去重)。
+const issueCount = computed(
+  () => sortedLines.value.filter((l) => l.renderable === false || l.warning !== undefined).length,
 )
 const allVisible = computed(() => total.value > 0 && visibleCount.value === total.value)
 const isIndeterminate = computed(() => visibleCount.value > 0 && visibleCount.value < total.value)
 
+// 首次请求失败自动展开,故障不被折叠入口隐藏;重试成功后保持当前展开状态。
+watch(
+  () => props.error,
+  (error) => {
+    if (error) expanded.value = true
+  },
+  { immediate: true },
+)
+
 function toggle(lineId: number) {
+  if (props.handle?.lines.find((l) => l.id === lineId)?.renderable === false) return
   const next = !visible.value[lineId]
   visible.value = { ...visible.value, [lineId]: next }
   props.handle?.setLineVisible(lineId, next)
@@ -93,38 +117,64 @@ function toggleAll() {
       :aria-label="expanded ? '收起线路清单' : '展开线路清单'"
       @click="expanded = !expanded"
     >
-      线路
+      <span>线路</span>
+      <span class="line-control__toggle-count">{{ visibleCount }}/{{ total }}</span>
+      <span v-if="issueCount > 0" class="line-control__toggle-issue">异常{{ issueCount }}</span>
     </button>
-    <div v-if="expanded && props.handle" class="line-control__panel">
-      <div class="line-control__toolbar">
-        <label class="line-control__select-all">
-          <input
-            type="checkbox"
-            class="line-control__select-all-input"
-            :checked="allVisible"
-            :indeterminate.prop="isIndeterminate"
-            :disabled="total === 0"
-            @click.prevent="toggleAll"
-          />
-          <span>全选</span>
-        </label>
-        <span class="line-control__count">{{ visibleCount }}/{{ total }}</span>
+    <div
+      v-if="expanded && (props.handle || props.loading || props.error)"
+      class="line-control__panel"
+    >
+      <div v-if="props.loading" class="line-control__state">线路加载中…</div>
+      <div
+        v-else-if="props.error"
+        class="line-control__state line-control__state--error"
+        role="alert"
+      >
+        <p>{{ props.error }}</p>
+        <button
+          type="button"
+          class="line-control__retry"
+          :disabled="props.loading"
+          @click="props.onRetry?.()"
+        >
+          重试
+        </button>
       </div>
-      <p v-if="total === 0" class="line-control__empty">暂无线线路数据</p>
-      <ul v-else class="line-control__list">
-        <li v-for="line in sortedLines" :key="line.id">
-          <button
-            type="button"
-            class="line-control__row"
-            :class="{ 'is-hidden': !visible[line.id] }"
-            :aria-pressed="visible[line.id]"
-            @click="toggle(line.id)"
-          >
-            <span class="line-control__swatch" :style="{ backgroundColor: line.color }" />
-            <span class="line-control__name">{{ line.name }}</span>
-          </button>
-        </li>
-      </ul>
+      <template v-else>
+        <div class="line-control__toolbar">
+          <label class="line-control__select-all">
+            <input
+              type="checkbox"
+              class="line-control__select-all-input"
+              :checked="allVisible"
+              :indeterminate.prop="isIndeterminate"
+              :disabled="total === 0"
+              @click.prevent="toggleAll"
+            />
+            <span>全选</span>
+          </label>
+          <span class="line-control__count">{{ visibleCount }}/{{ total }}</span>
+        </div>
+        <p v-if="total === 0" class="line-control__empty">暂无线线路数据</p>
+        <ul v-else class="line-control__list">
+          <li v-for="line in sortedLines" :key="line.id">
+            <button
+              type="button"
+              class="line-control__row"
+              :class="{ 'is-hidden': !visible[line.id], 'is-disabled': line.renderable === false }"
+              :disabled="line.renderable === false"
+              :aria-pressed="visible[line.id]"
+              @click="toggle(line.id)"
+            >
+              <span class="line-control__swatch" :style="{ backgroundColor: line.color }" />
+              <span class="line-control__name">{{ line.name }}</span>
+              <span v-if="line.reason" class="line-control__reason">{{ line.reason }}</span>
+              <span v-else-if="line.warning" class="line-control__warning">{{ line.warning }}</span>
+            </button>
+          </li>
+        </ul>
+      </template>
     </div>
   </div>
 </template>
@@ -140,6 +190,9 @@ function toggleAll() {
 }
 
 .line-control__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 64px;
   padding: 8px 16px;
   border: 1px solid rgba(105, 180, 255, 0.35);
@@ -148,6 +201,45 @@ function toggleAll() {
   color: inherit;
   font-size: 14px;
   letter-spacing: 2px;
+  cursor: pointer;
+}
+
+.line-control__toggle-count {
+  font-size: 12px;
+  letter-spacing: 0;
+  color: rgba(233, 248, 255, 0.7);
+}
+
+.line-control__toggle-issue {
+  font-size: 12px;
+  letter-spacing: 0;
+  color: #ffd28f;
+}
+
+/* 加载中/失败态内容 */
+.line-control__state {
+  padding: 14px 12px;
+  font-size: 13px;
+  text-align: center;
+  color: rgba(233, 248, 255, 0.85);
+  min-width: 148px;
+}
+
+.line-control__state p {
+  margin: 0 0 10px;
+}
+
+.line-control__state--error {
+  color: #ffb4a8;
+}
+
+.line-control__retry {
+  padding: 4px 18px;
+  border: 1px solid rgba(105, 180, 255, 0.5);
+  border-radius: 3px;
+  background: rgba(64, 140, 255, 0.2);
+  color: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -226,6 +318,29 @@ function toggleAll() {
 /* 隐藏态整体降亮度 */
 .line-control__row.is-hidden {
   opacity: 0.45;
+}
+
+/* 不可渲染行:禁用并整体弱化 */
+.line-control__row.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 不可渲染原因与坏站点警告:行内小字 */
+.line-control__reason,
+.line-control__warning {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.line-control__reason {
+  color: #ffb4a8;
+}
+
+.line-control__warning {
+  color: #ffd28f;
 }
 
 .line-control__swatch {

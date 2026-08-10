@@ -24,10 +24,23 @@ interface RenderableStation {
   lineIds: number[]
 }
 
+/** 面板行元数据:可渲染线路不含异常字段;不可渲染禁用并给出原因,坏站点警告不影响操作。 */
+export interface LineMeta {
+  id: number
+  name: string
+  color: string
+  /** 缺省视为可渲染;false 时轨迹不进渲染层,行禁用并显示 reason。 */
+  renderable?: boolean
+  /** 不可渲染原因(少于 2 个有效点/经纬不一致/轨迹不可解析)。 */
+  reason?: string
+  /** 坏站点警告:轨迹可渲染,行保持可操作。 */
+  warning?: string
+}
+
 /** 线路显示单元的可见控制契约:面板只通过它切换显隐,不接触 Cesium 对象。 */
 export interface LineRenderHandle {
-  /** 可渲染线路元数据;自然排序在面板侧完成。 */
-  lines: Array<{ id: number; name: string; color: string }>
+  /** 全部线路元数据(含不可渲染与警告);自然排序在面板侧完成。 */
+  lines: LineMeta[]
   /** 切换线路显示单元(轨迹 + 独占站点)可见性;不改变相机。 */
   setLineVisible(lineId: number, visible: boolean): void
   /** 整体清理,离开首页时调用。 */
@@ -145,26 +158,39 @@ export function createLineRenderer(
 
 /**
  * 首页级入口:请求线路数据 → 规范化 → 渲染。
- * 接口失败或返回空数组都作为正常空状态处理,返回空句柄。
+ * 请求失败时 reject(由调用方展示失败与重试);返回空数组是正常空状态,不计异常。
+ * 句柄携带全部线路元数据:不可渲染线路带 reason,可渲染但含坏站点的线路带 warning。
  */
 export async function loadMetroLines(viewer: Cesium.Viewer): Promise<LineRenderHandle> {
-  try {
-    // 动态导入:避免静态值依赖把 api/axios 链带进纯渲染模块
-    const { getLine } = await import('@/api/line')
-    const res = await getLine()
-    const rawLines: Line[] = res.data.data
-    const lines = normalizeLines(rawLines)
-    const renderable = lines.filter((l) => l.renderable)
-    // 只从可渲染线路建站点注册表,不可渲染线路的站点不进场景(避免孤立站点)
-    const renderableIds = new Set(renderable.map((l) => l.id))
-    const { stations } = buildStationRegistry(rawLines.filter((l) => renderableIds.has(l.id)))
-    return createLineRenderer(
-      viewer,
-      renderable.map((l) => ({ id: l.id, name: l.name, positions: l.positions })),
-      stations,
-    )
-  } catch (error) {
-    console.warn('线路渲染加载失败:', error)
-    return { lines: [], setLineVisible: () => {}, stop: () => {} }
+  // 动态导入:避免静态值依赖把 api/axios 链带进纯渲染模块
+  const { getLine } = await import('@/api/line')
+  const res = await getLine()
+  const rawLines: Line[] = res.data.data
+  const lines = normalizeLines(rawLines)
+  const renderable = lines.filter((l) => l.renderable)
+  // 只从可渲染线路建站点注册表,不可渲染线路的站点不进场景(避免孤立站点)
+  const renderableIds = new Set(renderable.map((l) => l.id))
+  const { stations, skippedByLine } = buildStationRegistry(
+    rawLines.filter((l) => renderableIds.has(l.id)),
+  )
+  const handle = createLineRenderer(
+    viewer,
+    renderable.map((l) => ({ id: l.id, name: l.name, positions: l.positions })),
+    stations,
+  )
+  // 覆盖元数据:保留渲染器的显隐/清理,行数据扩展为全部线路(含异常信息)
+  return {
+    ...handle,
+    lines: lines.map((l) => {
+      const meta: LineMeta = { id: l.id, name: l.name, color: resolveLineColor(l.id, l.name) }
+      if (!l.renderable) {
+        meta.renderable = false
+        meta.reason = l.reason
+        return meta
+      }
+      const skipped = skippedByLine.get(l.id) ?? 0
+      if (skipped > 0) meta.warning = `跳过 ${skipped} 个坏站点`
+      return meta
+    }),
   }
 }

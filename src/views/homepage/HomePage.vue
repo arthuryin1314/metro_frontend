@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import Viewer from 'viewerjs'
 import 'viewerjs/dist/viewer.css'
 import OperationChart from './component/chart/OperationChart.vue'
@@ -14,6 +14,7 @@ import LineControlPanel from './component/LineControlPanel.vue'
 import { useCesiumStore } from '@/stores/ceisumStore'
 import type { LineRenderHandle } from '@/utils/cesium/lineRenderer'
 import { loadMetroLines } from '@/utils/cesium/lineRenderer'
+import type { Viewer as CesiumViewer } from 'cesium'
 
 const subwayOverviewRef = useTemplateRef<HTMLImageElement>('subwayOverview')
 let subwayOverviewViewer: Viewer | undefined
@@ -25,19 +26,41 @@ onMounted(() => {
 })
 
 // 线路显示单元:进入首页渲染,离开首页完整清理。
+// 加载失败展示错误并支持整批重试;空数组为正常空状态,不算失败。
 const cesiumStore = useCesiumStore()
 const lineRenderHandle = shallowRef<LineRenderHandle | null>(null)
+const lineLoading = ref(false)
+const lineError = ref('')
 let lineRenderTask: Promise<void> | undefined
+
+async function loadLines(viewer: CesiumViewer) {
+  lineLoading.value = true
+  lineError.value = ''
+  try {
+    lineRenderHandle.value = await loadMetroLines(viewer)
+  } catch (error) {
+    console.warn('线路渲染加载失败:', error)
+    lineRenderHandle.value = null
+    lineError.value = '线路数据加载失败,请重试'
+  } finally {
+    lineLoading.value = false
+  }
+}
+
 const stopViewerWatch = watch(
   () => cesiumStore.cesiumInstance,
   (viewer) => {
     if (!viewer || lineRenderTask) return
-    lineRenderTask = loadMetroLines(viewer).then((handle) => {
-      lineRenderHandle.value = handle
-    })
+    lineRenderTask = loadLines(viewer)
   },
   { immediate: true },
 )
+
+// 重试:重新请求整批线路,不改变面板展开状态。
+function retryLines() {
+  if (!cesiumStore.cesiumInstance || lineLoading.value) return
+  void loadLines(cesiumStore.cesiumInstance)
+}
 
 onBeforeUnmount(() => {
   stopViewerWatch()
@@ -67,7 +90,12 @@ const videoSource: VideoSource = {
       </PagePanel>
     </aside>
     <aside class="dashboard-panels dashboard-panels--right" aria-label="右侧数据面板">
-      <LineControlPanel :handle="lineRenderHandle" />
+      <LineControlPanel
+        :handle="lineRenderHandle"
+        :loading="lineLoading"
+        :error="lineError || null"
+        :on-retry="retryLines"
+      />
       <PagePanel>
         <template #header><h2>线路概览</h2></template>
         <template #content>

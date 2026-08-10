@@ -128,26 +128,30 @@ function normalizeStationName(name: string): string {
  * 建立物理站点注册表:规范化站名与近似坐标共同识别同一物理站点,
  * 相同站点只保留一条记录并累积所属线路;缺失站点列表/站名/坐标的行
  * 按行跳过并计数,不抛异常、不阻断其他站点。
- * 返回 { stations, skipped } —— skipped 为被跳过的站点数。
+ * 返回 { stations, skipped, skippedByLine } —— skipped 为全局被跳过的站点数;
+ * skippedByLine 按线路 ID 记录各自跳过的站点数,供坏站点警告归属到线路。
  */
 export function buildStationRegistry(
   lines: Array<{
     id: number
     stationsList?: Array<{ name?: string; xy_coords?: string | null }>
   }>,
-): { stations: PhysicalStation[]; skipped: number } {
+): { stations: PhysicalStation[]; skipped: number; skippedByLine: Map<number, number> } {
   const stations: PhysicalStation[] = []
   let skipped = 0
+  const skippedByLine = new Map<number, number>()
   for (const line of lines) {
     if (!line.stationsList) continue
     for (const station of line.stationsList) {
       if (station.name === undefined || station.name === null) {
         skipped++
+        skippedByLine.set(line.id, (skippedByLine.get(line.id) ?? 0) + 1)
         continue
       }
       const pos = parseStationCoords(station.xy_coords)
       if (!pos) {
         skipped++
+        skippedByLine.set(line.id, (skippedByLine.get(line.id) ?? 0) + 1)
         continue
       }
       const normalizedName = normalizeStationName(station.name)
@@ -164,7 +168,7 @@ export function buildStationRegistry(
       }
     }
   }
-  return { stations, skipped }
+  return { stations, skipped, skippedByLine }
 }
 
 /** 把接口线路规范化为领域线路数据;坏轨迹显式标记为不可渲染。 */

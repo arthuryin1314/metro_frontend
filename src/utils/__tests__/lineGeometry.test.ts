@@ -141,8 +141,23 @@ test('无效站点坐标被跳过并计数,不阻断其他站点', () => {
       ],
     },
   ]
-  const { stations, skipped } = buildStationRegistry(lines)
+  const { stations, skipped, skippedByLine } = buildStationRegistry(lines)
   assert.equal(skipped, 1)
+  assert.equal(skippedByLine.get(1), 1)
+  assert.equal(stations.length, 1)
+})
+
+test('坏站点按线路归属计数,供警告去重', () => {
+  const lines = [
+    { id: 1, stationsList: [{ name: '坏站', xy_coords: 'oops;30.7' }] },
+    { id: 2, stationsList: [{ name: '坏站', xy_coords: 'oops;30.7' }] },
+    { id: 3, stationsList: [{ name: '好站', xy_coords: '114.329481;30.711953' }] },
+  ]
+  const { stations, skipped, skippedByLine } = buildStationRegistry(lines)
+  assert.equal(skipped, 2)
+  assert.equal(skippedByLine.get(1), 1)
+  assert.equal(skippedByLine.get(2), 1)
+  assert.equal(skippedByLine.get(3), undefined)
   assert.equal(stations.length, 1)
 })
 
