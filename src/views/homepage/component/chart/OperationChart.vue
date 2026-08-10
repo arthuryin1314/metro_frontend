@@ -4,21 +4,13 @@ import {
   VueUiHorizontalBar,
   type VueUiHorizontalBarDatasetItem,
 } from 'vue-data-ui/vue-ui-horizontal-bar'
-import { operationChartConfig } from '@/chartConfig/operationChart'
-import { getLine, type Line } from '@/api/line'
+import { buildLineBarDataset, operationChartConfig } from '@/chartConfig/operationChart'
+import { getLine } from '@/api/line'
 
 const dataset = ref<VueUiHorizontalBarDatasetItem[]>([])
 async function getLineList() {
   const res = await getLine()
-  const lineList = res.data.data
-  dataset.value = lineList.map((line: Line) => ({
-    name: line.name,
-    value: Math.round(Number(line.length) || 0),
-    color: `#${Math.floor(Math.random() * 0xffffff)
-      .toString(16)
-      .padStart(6, '0')}`,
-    children: [],
-  }))
+  dataset.value = buildLineBarDataset(res.data.data)
 }
 onMounted(() => {
   getLineList()

@@ -1,4 +1,17 @@
 import type { VueUiHorizontalBarConfig } from 'vue-data-ui/vue-ui-horizontal-bar'
+import type { VueUiHorizontalBarDatasetItem } from 'vue-data-ui/vue-ui-horizontal-bar'
+import type { Line } from '@/api/line'
+import { resolveLineColor } from '../utils/lineColor.ts'
+
+/** 把线路数据映射为运营统计图数据集,颜色来自共享官方线路色解析器。 */
+export function buildLineBarDataset(lines: Line[]): VueUiHorizontalBarDatasetItem[] {
+  return lines.map((line) => ({
+    name: line.name,
+    value: Math.round(Number(line.length) || 0),
+    color: resolveLineColor(line.id, line.name),
+    children: [],
+  }))
+}
 
 export const operationChartConfig: VueUiHorizontalBarConfig = {
   skeletonDataset: null,
