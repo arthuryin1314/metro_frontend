@@ -12,7 +12,15 @@ function loadVisibility(lines: Array<{ id: number }>): Record<number, boolean> {
   const saved: Record<number, boolean> = {}
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (raw) Object.assign(saved, JSON.parse(raw))
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') {
+        for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+          // 严格布尔校验:0/null/字符串等非布尔值视为无效,不进入恢复状态
+          if (typeof value === 'boolean') saved[Number(key)] = value
+        }
+      }
+    }
   } catch {
     // ponytail: 损坏数据按无存储处理,全部默认可见
   }

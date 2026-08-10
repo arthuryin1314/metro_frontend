@@ -156,6 +156,18 @@ describe('LineControlPanel', () => {
     expect(calls).toEqual(['setLineVisible:11:false'])
   })
 
+  it('会话值严格布尔校验:字符串/数字/null 视为无效,默认可见且不同步渲染器', async () => {
+    sessionStorage.setItem(
+      'metro-line-visibility',
+      JSON.stringify({ 1: 'false', 2: 0, 11: null }), // 均非布尔,全部无效
+    )
+    const { handle, calls } = makeHandle(UNSORTED_LINES)
+    const wrapper = mount(LineControlPanel, { props: { handle } })
+    await wrapper.find('.line-control__toggle').trigger('click')
+    expect(wrapper.find('.line-control__count').text()).toBe('3/3')
+    expect(calls).toEqual([]) // 无任何隐藏同步
+  })
+
   it('0 条线路:显示 0/0、禁用全选与空数据提示,不自动展开', async () => {
     const { handle } = makeHandle([])
     const wrapper = mount(LineControlPanel, { props: { handle } })
