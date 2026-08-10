@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, useTemplateRef } from 'vue'
+import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue'
 import Viewer from 'viewerjs'
 import 'viewerjs/dist/viewer.css'
 import OperationChart from './component/chart/OperationChart.vue'
@@ -10,6 +10,8 @@ import subwayOverviewImage from '@/assets/uiResources/sub.png'
 import AlarmChart from './component/chart/AlarmChart.vue'
 import VideoMonitor from './component/video/VideoMonitor.vue'
 import type { VideoSource } from './component/video/types'
+import { useCesiumStore } from '@/stores/ceisumStore'
+import { loadMetroLines } from '@/utils/cesium/lineRenderer'
 
 const subwayOverviewRef = useTemplateRef<HTMLImageElement>('subwayOverview')
 let subwayOverviewViewer: Viewer | undefined
@@ -20,7 +22,26 @@ onMounted(() => {
   }
 })
 
-onBeforeUnmount(() => subwayOverviewViewer?.destroy())
+// 线路显示单元:进入首页渲染,离开首页完整清理。
+const cesiumStore = useCesiumStore()
+let stopLineRender: (() => void) | undefined
+let lineRenderTask: Promise<void> | undefined
+const stopViewerWatch = watch(
+  () => cesiumStore.cesiumInstance,
+  (viewer) => {
+    if (!viewer || lineRenderTask) return
+    lineRenderTask = loadMetroLines(viewer).then((stop) => {
+      stopLineRender = stop
+    })
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  stopViewerWatch()
+  subwayOverviewViewer?.destroy()
+  if (lineRenderTask) void lineRenderTask.then(() => stopLineRender?.())
+})
 
 const videoSource: VideoSource = {
   url: import.meta.env.VITE_VIDEO_MONITOR_URL ?? '',
