@@ -39,7 +39,10 @@ const LINE_WIDTH = 4
 const LINE_OUTLINE_WIDTH = 2
 const LINE_OUTLINE_COLOR = '#0a1a2b'
 const STATION_PIXEL_SIZE = 10
-const STATION_LABEL_MAX_DISTANCE = 3000 // 站名随镜头距离显示
+const STATION_LABEL_MAX_DISTANCE = 3000 // 普通站:站名随镜头距离显示
+// 换乘站外环:贴地椭圆在俯视角下为正圆环,与内环 point 组成单实体双环。
+const TRANSFER_RING_RADIUS = 30 // 米
+const TRANSFER_LABEL_MAX_DISTANCE = 4000 // 换乘站标签可见距离不小于普通站
 
 /** 创建线路与站点实体;返回显隐控制句柄。空输入返回空句柄,不创建地图对象。 */
 export function createLineRenderer(
@@ -73,10 +76,11 @@ export function createLineRenderer(
     })
     lineEntities.set(line.id, [outline, fill])
   }
-  // 站点记录:实体 + 所属线路。独占站点(单线路)随线路显隐;
-  // ponytail: 换乘站可见性派生(任一所属线路可见)留给后续 Ticket
+  // 站点记录:实体 + 所属线路。可见性统一按所属线路派生:
+  // 普通站(单线路)= 该线路可见;换乘站(多线路)= 任一所属线路可见。
   const stationRecords: Array<{ entity: Cesium.Entity; lineIds: number[] }> = []
   for (const station of stations) {
+    const isTransfer = station.lineIds.length >= 2
     const entity = dataSource.entities.add({
       position: Cesium.Cartesian3.fromDegrees(station.lng, station.lat),
       point: {
@@ -85,6 +89,24 @@ export function createLineRenderer(
         outlineColor: Cesium.Color.fromCssColorString(LINE_OUTLINE_COLOR),
         outlineWidth: LINE_OUTLINE_WIDTH,
       },
+      // 换乘站外环:同一物理站点单实体双环,不叠加重复标记
+      ...(isTransfer
+        ? {
+            ellipse: {
+              semiMajorAxis: TRANSFER_RING_RADIUS,
+              semiMinorAxis: TRANSFER_RING_RADIUS,
+              height: 1, // 略高于地面,避免与底图 z-fighting 闪烁
+              material: Cesium.Color.TRANSPARENT,
+              outline: true,
+              outlineColor: Cesium.Color.fromCssColorString(LINE_OUTLINE_COLOR),
+              outlineWidth: LINE_OUTLINE_WIDTH,
+              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
+                0,
+                TRANSFER_LABEL_MAX_DISTANCE,
+              ),
+            },
+          }
+        : {}),
       label: {
         text: station.name,
         font: '12px sans-serif',
@@ -93,24 +115,26 @@ export function createLineRenderer(
         backgroundColor: Cesium.Color.fromCssColorString(LINE_OUTLINE_COLOR),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         pixelOffset: new Cesium.Cartesian2(0, -14),
-        // ponytail: 换乘站的更宽距离显示是 #5 的范围
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(
           0,
-          STATION_LABEL_MAX_DISTANCE,
+          isTransfer ? TRANSFER_LABEL_MAX_DISTANCE : STATION_LABEL_MAX_DISTANCE,
         ),
       },
     })
     stationRecords.push({ entity, lineIds: station.lineIds })
   }
 
+  // 线路可见状态:换乘站可见性由它派生。初始全部可见(所有可渲染线路首次默认显示)。
+  const lineVisibleState = new Map<number, boolean>(lines.map((l) => [l.id, true]))
+
   return {
     lines: lines.map((l) => ({ id: l.id, name: l.name, color: resolveLineColor(l.id, l.name) })),
     setLineVisible(lineId, visible) {
+      lineVisibleState.set(lineId, visible)
       for (const entity of lineEntities.get(lineId) ?? []) entity.show = visible
+      // 站点统一重算:普通站 = 该线路可见;换乘站 = 任一所属线路可见
       for (const record of stationRecords) {
-        if (record.lineIds.length === 1 && record.lineIds[0] === lineId) {
-          record.entity.show = visible
-        }
+        record.entity.show = record.lineIds.some((id) => lineVisibleState.get(id))
       }
     },
     stop() {
