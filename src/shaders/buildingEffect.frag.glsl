@@ -22,10 +22,6 @@ vec3 getNightStripe(vec3 positionMC, float height) {
 }
 
 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-    vec3 positionEC = fsInput.attributes.positionEC;
-    vec3 normalEC = normalize(fsInput.attributes.normalEC);
-    vec2 reflectionUv = getReflectionUv(positionEC, normalEC);
-
     if (u_isDark) {
         float heightRange = max(u_maxHeight - u_minHeight, 0.001);
         float heightFactor = clamp(
@@ -33,14 +29,16 @@ void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
             0.0,
             1.0
         );
-        vec3 nightReflection = texture(u_textureNight, reflectionUv).rgb;
-        vec3 nightBase = mix(material.diffuse * 0.18, nightReflection, 0.82);
+        vec3 nightBase = material.diffuse * 0.18;
         nightBase *= mix(0.55, 0.95, heightFactor);
 
         vec3 stripeColor = getNightStripe(fsInput.attributes.positionMC, fsInput.attributes.positionMC.z);
         material.diffuse = nightBase + stripeColor * 0.18;
         material.emissive += stripeColor * u_emissiveStrength;
     } else {
+        vec3 positionEC = fsInput.attributes.positionEC;
+        vec3 normalEC = normalize(fsInput.attributes.normalEC);
+        vec2 reflectionUv = getReflectionUv(positionEC, normalEC);
         vec3 dayReflection = texture(u_textureDay, reflectionUv).rgb;
         material.diffuse = mix(material.diffuse, dayReflection, 0.55);
     }

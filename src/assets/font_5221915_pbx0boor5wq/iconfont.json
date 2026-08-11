@@ -1,0 +1,16 @@
+{
+  "id": "5221915",
+  "name": "智慧地铁",
+  "font_family": "iconfont",
+  "css_prefix_text": "icon-",
+  "description": "",
+  "glyphs": [
+    {
+      "icon_id": "10904998",
+      "name": "图层",
+      "font_class": "layer",
+      "unicode": "e613",
+      "unicode_decimal": 58899
+    }
+  ]
+}

@@ -211,14 +211,19 @@ describe('LineControlPanel', () => {
     expect(wrapper.find('.line-control__count').text()).toBe('3/3')
   })
 
-  it('折叠入口显示可见数/可渲染总数,异常时追加异常数', async () => {
+  it('折叠入口只显示图层图标,展开后显示线路计数与异常数', async () => {
     const { handle } = makeHandle(UNSORTED_LINES)
     const wrapper = mount(LineControlPanel, { props: { handle } })
-    expect(wrapper.find('.line-control__toggle-count').text()).toBe('3/3')
+    expect(wrapper.find('.line-control__toggle .icon-layer').exists()).toBe(true)
+    expect(wrapper.find('.line-control__toggle').text()).toBe('')
+    expect(wrapper.find('.line-control__toggle').attributes('aria-label')).toBe('线路图层')
+    expect(wrapper.find('.line-control__toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.line-control__toggle-count').exists()).toBe(false)
     await wrapper.find('.line-control__toggle').trigger('click')
+    expect(wrapper.find('.line-control__toggle').attributes('aria-expanded')).toBe('true')
     await wrapper.findAll('.line-control__row')[0]!.trigger('click')
-    expect(wrapper.find('.line-control__toggle-count').text()).toBe('2/3')
-    expect(wrapper.find('.line-control__toggle-issue').exists()).toBe(false) // 无异常不显示
+    expect(wrapper.find('.line-control__count').text()).toBe('2/3')
+    expect(wrapper.find('.line-control__issue').exists()).toBe(false) // 无异常不显示
   })
 
   it('坏站点警告:轨迹可渲染的线路保持可操作并显示警告原因,计为异常', async () => {
@@ -234,7 +239,7 @@ describe('LineControlPanel', () => {
     await wrapper.findAll('.line-control__row')[0]!.trigger('click')
     expect(calls).toEqual(['setLineVisible:1:false'])
     expect(wrapper.find('.line-control__count').text()).toBe('1/2')
-    expect(wrapper.find('.line-control__toggle-issue').text()).toBe('异常1')
+    expect(wrapper.find('.line-control__issue').text()).toBe('异常1')
   })
 
   it('不可渲染线路禁用并显示原因,不计入可渲染总数', async () => {
@@ -258,7 +263,7 @@ describe('LineControlPanel', () => {
     expect(row.find('.line-control__reason').text()).toBe('轨迹横纵坐标数量不一致')
     await row.trigger('click') // 禁用行不触发任何调用
     expect(calls).toEqual([])
-    expect(wrapper.find('.line-control__toggle-issue').text()).toBe('异常1')
+    expect(wrapper.find('.line-control__issue').text()).toBe('异常1')
   })
 
   it('任一异常线路不阻断其他有效线路的加载和显隐', async () => {
@@ -287,14 +292,18 @@ describe('LineControlPanel', () => {
     ]
     const { handle } = makeHandle(lines)
     const wrapper = mount(LineControlPanel, { props: { handle } })
-    expect(wrapper.find('.line-control__toggle-issue').text()).toBe('异常2')
+    expect(wrapper.find('.line-control__issue').exists()).toBe(false)
+    await wrapper.find('.line-control__toggle').trigger('click')
+    expect(wrapper.find('.line-control__issue').text()).toBe('异常2')
   })
 
   it('空数组不是失败:不自动展开、无异常计数', async () => {
     const { handle } = makeHandle([])
     const wrapper = mount(LineControlPanel, { props: { handle } })
     expect(wrapper.find('.line-control__panel').exists()).toBe(false) // 不自动展开
-    expect(wrapper.find('.line-control__toggle-issue').exists()).toBe(false)
-    expect(wrapper.find('.line-control__toggle-count').text()).toBe('0/0')
+    expect(wrapper.find('.line-control__toggle').text()).toBe('')
+    expect(wrapper.find('.line-control__issue').exists()).toBe(false)
+    await wrapper.find('.line-control__toggle').trigger('click')
+    expect(wrapper.find('.line-control__count').text()).toBe('0/0')
   })
 })

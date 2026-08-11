@@ -115,11 +115,11 @@ function toggleAll() {
       type="button"
       class="line-control__toggle"
       :aria-expanded="expanded"
+      aria-label="线路图层"
+      title="线路图层"
       @click="expanded = !expanded"
     >
-      <span>线路</span>
-      <span class="line-control__toggle-count">{{ visibleCount }}/{{ total }}</span>
-      <span v-if="issueCount > 0" class="line-control__toggle-issue">异常{{ issueCount }}</span>
+      <span class="iconfont icon-layer" aria-hidden="true" />
     </button>
     <div
       v-if="expanded && (props.handle || props.loading || props.error)"
@@ -154,7 +154,10 @@ function toggleAll() {
             />
             <span>全选</span>
           </label>
-          <span class="line-control__count">{{ visibleCount }}/{{ total }}</span>
+          <div class="line-control__summary">
+            <span class="line-control__count">{{ visibleCount }}/{{ total }}</span>
+            <span v-if="issueCount > 0" class="line-control__issue">异常{{ issueCount }}</span>
+          </div>
         </div>
         <p v-if="total === 0" class="line-control__empty">暂无线线路数据</p>
         <ul v-else class="line-control__list">
@@ -190,30 +193,19 @@ function toggleAll() {
 }
 
 .line-control__toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 64px;
-  padding: 8px 16px;
-  border: 1px solid rgba(105, 180, 255, 0.35);
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #f4c842;
   border-radius: 4px;
-  background: rgba(7, 21, 34, 0.85);
-  color: inherit;
-  font-size: 14px;
-  letter-spacing: 2px;
+  background: transparent;
+  color: #f4c842;
+  font-size: 22px;
+  line-height: 1;
   cursor: pointer;
-}
-
-.line-control__toggle-count {
-  font-size: 12px;
-  letter-spacing: 0;
-  color: rgba(233, 248, 255, 0.7);
-}
-
-.line-control__toggle-issue {
-  font-size: 12px;
-  letter-spacing: 0;
-  color: #ffd28f;
 }
 
 /* 加载中/失败态内容 */
@@ -235,29 +227,39 @@ function toggleAll() {
 
 .line-control__retry {
   padding: 4px 18px;
-  border: 1px solid rgba(105, 180, 255, 0.5);
+  border: 1px solid rgba(244, 200, 66, 0.65);
   border-radius: 3px;
-  background: rgba(64, 140, 255, 0.2);
+  background: rgba(244, 200, 66, 0.16);
   color: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 
 .line-control__toggle:hover {
-  border-color: rgba(105, 180, 255, 0.7);
+  border-color: #ffe17a;
+  background: transparent;
+  color: #ffe17a;
 }
 
-/* 键盘焦点可见性:三个交互元素统一科技蓝描边 */
-.line-control__toggle:focus-visible,
+/* 键盘焦点可见性:面板与按钮统一黄色描边 */
+.line-control__toggle:focus-visible {
+  outline: 2px solid rgba(244, 200, 66, 0.9);
+  outline-offset: 2px;
+}
+
 .line-control__retry:focus-visible,
 .line-control__row:focus-visible {
-  outline: 2px solid rgba(105, 180, 255, 0.9);
+  outline: 2px solid rgba(244, 200, 66, 0.9);
   outline-offset: 2px;
 }
 
 .line-control__select-all-input:focus-visible {
-  outline: 2px solid rgba(105, 180, 255, 0.9);
+  outline: 2px solid rgba(244, 200, 66, 0.9);
   outline-offset: 1px;
+}
+
+.line-control__select-all-input {
+  accent-color: #f4c842;
 }
 
 .line-control__panel {
@@ -267,7 +269,7 @@ function toggleAll() {
   max-height: 40vh;
   overflow-y: auto;
   min-width: 148px;
-  border: 1px solid rgba(105, 180, 255, 0.35);
+  border: 1px solid rgba(244, 200, 66, 0.65);
   border-radius: 4px;
   background: rgba(7, 21, 34, 0.88);
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
@@ -279,8 +281,14 @@ function toggleAll() {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px 6px;
-  border-bottom: 1px solid rgba(105, 180, 255, 0.25);
+  border-bottom: 1px solid rgba(244, 200, 66, 0.35);
   font-size: 13px;
+}
+
+.line-control__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .line-control__select-all {
@@ -291,7 +299,11 @@ function toggleAll() {
 }
 
 .line-control__count {
-  color: rgba(233, 248, 255, 0.7);
+  color: #f4c842;
+}
+
+.line-control__issue {
+  color: #ffd28f;
 }
 
 .line-control__empty {
@@ -325,7 +337,7 @@ function toggleAll() {
 }
 
 .line-control__row:hover {
-  background: rgba(64, 140, 255, 0.18);
+  background: rgba(244, 200, 66, 0.16);
 }
 
 /* 隐藏态整体降亮度 */
