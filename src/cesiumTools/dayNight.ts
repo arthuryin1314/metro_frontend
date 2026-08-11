@@ -1,7 +1,7 @@
 import * as Cesium from 'cesium'
 import waterGeoJsonUrl from '@/assets/water.json?url'
 import waterNormalsUrl from '@/assets/waterNormals.jpg'
-import { createBuildingEffectShader } from '@/utils/cesium/buildingEffect'
+import { createBuildingEffectShader } from '@/cesiumTools/buildingEffect'
 
 type DayNightMode = 'day' | 'night'
 

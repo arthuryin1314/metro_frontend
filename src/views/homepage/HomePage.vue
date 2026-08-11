@@ -12,8 +12,8 @@ import VideoMonitor from './component/video/VideoMonitor.vue'
 import type { VideoSource } from './component/video/types'
 import LineControlPanel from './component/LineControlPanel.vue'
 import { useCesiumStore } from '@/stores/ceisumStore'
-import type { LineRenderHandle } from '@/utils/cesium/lineRenderer'
-import { loadMetroLines } from '@/utils/cesium/lineRenderer'
+import type { LineRenderHandle } from '@/cesiumTools/lineRenderer'
+import { loadMetroLines } from '@/cesiumTools/lineRenderer'
 import type { Viewer as CesiumViewer } from 'cesium'
 
 const subwayOverviewRef = useTemplateRef<HTMLImageElement>('subwayOverview')

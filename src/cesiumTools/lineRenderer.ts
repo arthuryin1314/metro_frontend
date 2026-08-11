@@ -1,7 +1,11 @@
 import * as Cesium from 'cesium'
 import type { Line } from '@/api/line'
-import { normalizeLines, buildStationRegistry } from '../lineGeometry.ts'
-import { resolveLineColor } from '../lineColor.ts'
+import { normalizeLines, buildStationRegistry } from '../utils/lineGeometry.ts'
+import { resolveLineColor } from '../utils/lineColor.ts'
+import { calculateStationVerticalAnchors } from '../utils/stationVerticalGeometry.ts'
+import { installStationPopupInteraction } from './interaction.ts'
+import { CesiumPopupManager } from './popup/popupManager.ts'
+import { createStationConeMaterial, createStationGlowMaterial } from './stationMaterial.ts'
 
 /**
  * 薄 Cesium 渲染适配器:首页线路显示单元的创建与清理。
@@ -22,6 +26,8 @@ interface RenderableStation {
   lng: number
   lat: number
   lineIds: number[]
+  /** 3D Tiles/椭球表面高程,未采样时回退到 0。 */
+  surfaceHeight?: number
 }
 
 /** 面板行元数据:可渲染线路不含异常字段;不可渲染禁用并给出原因,坏站点警告不影响操作。 */
@@ -53,6 +59,10 @@ const LINE_OUTLINE_WIDTH = 2
 const LINE_OUTLINE_COLOR = '#0a1a2b'
 const STATION_PIXEL_SIZE = 10
 const STATION_LABEL_MAX_DISTANCE = 3000 // 普通站:站名随镜头距离显示
+// 站点光锥:3D 发光锥体从地面升起,替代平面光底座圆。
+const CONE_HEIGHT = 200 // 米
+const CONE_BOTTOM_RADIUS = 22 // 米
+const CONE_TOP_RADIUS = 6 // 米
 // 换乘站外环:贴地椭圆在俯视角下为正圆环,与内环 point 组成单实体双环。
 const TRANSFER_RING_RADIUS = 30 // 米
 const TRANSFER_LABEL_MAX_DISTANCE = 4000 // 换乘站标签可见距离不小于普通站
@@ -67,6 +77,12 @@ export function createLineRenderer(
   if (lines.length === 0 && stations.length === 0) return emptyHandle
   const dataSource = new Cesium.CustomDataSource('metro-lines')
   viewer.dataSources.add(dataSource)
+  let popupManager: CesiumPopupManager | null = null
+  let stopStationInteraction = () => {}
+  if (viewer.scene?.canvas && viewer.cesiumWidget?.container) {
+    popupManager = new CesiumPopupManager(viewer)
+    stopStationInteraction = installStationPopupInteraction(viewer, popupManager)
+  }
 
   // 线路 ID → 该线路的轨迹实体(描边线 + 填充线),供按线路显隐。
   const lineEntities = new Map<number, Cesium.Entity[]>()
@@ -89,13 +105,28 @@ export function createLineRenderer(
     })
     lineEntities.set(line.id, [outline, fill])
   }
-  // 站点记录:实体 + 所属线路。可见性统一按所属线路派生:
+  // 站点记录:一组视觉实体 + 所属线路。可见性统一按所属线路派生:
   // 普通站(单线路)= 该线路可见;换乘站(多线路)= 任一所属线路可见。
-  const stationRecords: Array<{ entity: Cesium.Entity; lineIds: number[] }> = []
+  const stationRecords: Array<{ entities: Cesium.Entity[]; lineIds: number[] }> = []
   for (const station of stations) {
     const isTransfer = station.lineIds.length >= 2
-    const entity = dataSource.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(station.lng, station.lat),
+    const anchors = calculateStationVerticalAnchors({
+      surfaceHeight: station.surfaceHeight ?? 0,
+      coneHeight: CONE_HEIGHT,
+    })
+    const popupPosition = Cesium.Cartesian3.fromDegrees(
+      station.lng,
+      station.lat,
+      anchors.popupHeight,
+    )
+    const properties = {
+      stationName: station.name,
+      lineIds: station.lineIds,
+      popupPosition,
+    }
+    const groundEntity = dataSource.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(station.lng, station.lat, anchors.groundHeight),
+      properties,
       point: {
         pixelSize: STATION_PIXEL_SIZE,
         color: Cesium.Color.WHITE,
@@ -108,8 +139,12 @@ export function createLineRenderer(
             ellipse: {
               semiMajorAxis: TRANSFER_RING_RADIUS,
               semiMinorAxis: TRANSFER_RING_RADIUS,
-              height: 1, // 略高于地面,避免与底图 z-fighting 闪烁
-              material: Cesium.Color.TRANSPARENT,
+              height: anchors.groundHeight,
+              material: createStationGlowMaterial(
+                Cesium.Color.fromCssColorString(
+                  resolveLineColor(station.lineIds[0] ?? 0, station.name),
+                ),
+              ),
               outline: true,
               outlineColor: Cesium.Color.fromCssColorString(LINE_OUTLINE_COLOR),
               outlineWidth: LINE_OUTLINE_WIDTH,
@@ -120,6 +155,33 @@ export function createLineRenderer(
             },
           }
         : {}),
+    })
+    const coneEntity = dataSource.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(
+        station.lng,
+        station.lat,
+        anchors.coneCenterHeight,
+      ),
+      properties,
+      // Cylinder 以实体位置为中心,因此中心必须位于地面上方半个长度。
+      cylinder: {
+        length: CONE_HEIGHT,
+        topRadius: CONE_TOP_RADIUS,
+        bottomRadius: CONE_BOTTOM_RADIUS,
+        material: createStationConeMaterial(
+          Cesium.Color.fromCssColorString(
+            resolveLineColor(station.lineIds[0] ?? 0, station.name),
+          ),
+        ),
+      },
+    })
+    const labelEntity = dataSource.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(
+        station.lng,
+        station.lat,
+        anchors.labelHeight,
+      ),
+      properties,
       label: {
         text: station.name,
         font: '12px sans-serif',
@@ -134,7 +196,10 @@ export function createLineRenderer(
         ),
       },
     })
-    stationRecords.push({ entity, lineIds: station.lineIds })
+    stationRecords.push({
+      entities: [groundEntity, coneEntity, labelEntity],
+      lineIds: station.lineIds,
+    })
   }
 
   // 线路可见状态:换乘站可见性由它派生。初始全部可见(所有可渲染线路首次默认显示)。
@@ -147,10 +212,13 @@ export function createLineRenderer(
       for (const entity of lineEntities.get(lineId) ?? []) entity.show = visible
       // 站点统一重算:普通站 = 该线路可见;换乘站 = 任一所属线路可见
       for (const record of stationRecords) {
-        record.entity.show = record.lineIds.some((id) => lineVisibleState.get(id))
+        const stationVisible = record.lineIds.some((id) => lineVisibleState.get(id))
+        for (const entity of record.entities) entity.show = stationVisible
       }
     },
     stop() {
+      stopStationInteraction()
+      popupManager?.destroy()
       if (!viewer.isDestroyed()) viewer.dataSources.remove(dataSource, true)
     },
   }
@@ -173,10 +241,11 @@ export async function loadMetroLines(viewer: Cesium.Viewer): Promise<LineRenderH
   const { stations, skippedByLine } = buildStationRegistry(
     rawLines.filter((l) => renderableIds.has(l.id)),
   )
+  const stationsWithHeight = await resolveStationSurfaceHeights(viewer, stations)
   const handle = createLineRenderer(
     viewer,
     renderable.map((l) => ({ id: l.id, name: l.name, positions: l.positions })),
-    stations,
+    stationsWithHeight,
   )
   // 覆盖元数据:保留渲染器的显隐/清理,行数据扩展为全部线路(含异常信息)
   return {
@@ -192,5 +261,27 @@ export async function loadMetroLines(viewer: Cesium.Viewer): Promise<LineRenderH
       if (skipped > 0) meta.warning = `跳过 ${skipped} 个坏站点`
       return meta
     }),
+  }
+}
+
+async function resolveStationSurfaceHeights(
+  viewer: Cesium.Viewer,
+  stations: RenderableStation[],
+): Promise<RenderableStation[]> {
+  if (stations.length === 0 || !viewer.scene.sampleHeightSupported) {
+    return stations.map((station) => ({ ...station, surfaceHeight: 0 }))
+  }
+
+  const positions = stations.map((station) =>
+    Cesium.Cartographic.fromDegrees(station.lng, station.lat),
+  )
+  try {
+    const sampled = await viewer.scene.sampleHeightMostDetailed(positions)
+    return stations.map((station, index) => ({
+      ...station,
+      surfaceHeight: sampled[index]?.height ?? 0,
+    }))
+  } catch {
+    return stations.map((station) => ({ ...station, surfaceHeight: 0 }))
   }
 }

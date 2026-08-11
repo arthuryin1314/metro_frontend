@@ -3,7 +3,8 @@ import { onMounted, onUnmounted, useTemplateRef, markRaw } from 'vue'
 import * as Cesium from 'cesium'
 import { useCesiumStore } from '@/stores/ceisumStore'
 import { AMapImageryProvider } from '@cesium-china/cesium-map'
-import { createWaterPrimitive, setupDayNight } from '@/utils/cesium/dayNight'
+import { createWaterPrimitive, setupDayNight } from '@/cesiumTools/dayNight'
+import '@/cesiumTools/popup/popup.css'
 const containerRef = useTemplateRef<HTMLDivElement>('container')
 const cesiumStore = useCesiumStore()
 let viewer: Cesium.Viewer | undefined
@@ -32,7 +33,6 @@ onMounted(async () => {
   viewer.scene.globe.enableLighting = true
   viewer.scene.sun!.show = true
   viewer.imageryLayers.add(new Cesium.ImageryLayer(new AMapImageryProvider(AmapOptions)))
-  cesiumStore.SetViewer(markRaw(viewer))
   try {
     const loadedTileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl)
 
@@ -43,6 +43,8 @@ onMounted(async () => {
 
     viewer.scene.primitives.add(loadedTileset)
     cesiumStore.SetTileset(markRaw(loadedTileset))
+    // 线路站点需要 3D Tiles 表面高度,等 tileset 加入场景后再触发线路加载。
+    cesiumStore.SetViewer(markRaw(viewer))
     const water = await createWaterPrimitive(viewer)
     if (isUnmounted || viewer.isDestroyed()) {
       if (water && !water.primitive.isDestroyed()) water.primitive.destroy()
@@ -69,6 +71,8 @@ onMounted(async () => {
       },
     )
   } catch (error) {
+    // tileset 失败时仍允许线路使用椭球高度降级渲染。
+    if (!isUnmounted && viewer && !viewer.isDestroyed()) cesiumStore.SetViewer(markRaw(viewer))
     console.error('3D Tileset 加载失败：', error)
   }
 })

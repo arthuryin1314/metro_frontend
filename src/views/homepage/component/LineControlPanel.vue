@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { LineRenderHandle } from '@/utils/cesium/lineRenderer'
+import type { LineRenderHandle } from '@/cesiumTools/lineRenderer'
 import { sortLinesNaturally } from '@/utils/lineSort'
 
 const props = defineProps<{

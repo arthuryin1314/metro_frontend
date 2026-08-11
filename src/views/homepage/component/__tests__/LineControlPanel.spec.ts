@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import LineControlPanel from '../LineControlPanel.vue'
-import type { LineMeta, LineRenderHandle } from '@/utils/cesium/lineRenderer'
+import type { LineMeta, LineRenderHandle } from '@/cesiumTools/lineRenderer'
 
 beforeEach(() => {
   sessionStorage.clear()
